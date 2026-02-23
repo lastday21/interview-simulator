@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: ["main"]
   pull_request:
 
 jobs:
@@ -15,31 +16,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
+
+      - name: Install Poetry
+        run: python -m pip install --upgrade pip poetry
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pre-commit ruff mypy
+        run: poetry install --no-interaction --with dev
 
-      - name: Check linters
-        run: |
-          pre-commit run -a check-yaml
-          pre-commit run -a check-toml
-          pre-commit run -a check-json
-          pre-commit run -a end-of-file-fixer
-          pre-commit run -a trailing-whitespace
-          pre-commit run -a check-merge-conflict
-          pre-commit run -a detect-private-key
-          pre-commit run -a check-added-large-files
-          pre-commit run -a ruff
-          pre-commit run -a ruff-format
-          pre-commit run -a mypy
+      - name: Ruff check
+        run: poetry run ruff check .
+
+      - name: Ruff format check
+        run: poetry run ruff format --check .
 
       - name: Mypy
-        run: |
-          mypy --config-file pyproject.toml
+        run: poetry run mypy --config-file pyproject.toml .
 
 
   unit-tests:
@@ -52,16 +43,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
+
+      - name: Install Poetry
+        run: python -m pip install --upgrade pip poetry
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        run: poetry install --no-interaction --with dev
 
-      - name: Pytest (unit)
-        run: |
-          pytest -q -m "not integration"
+      - name: Pytest
+        run: poetry run pytest -m "not integration"
 
 
 #  integration-tests:

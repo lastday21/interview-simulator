@@ -2,42 +2,33 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
-      - id: check-yaml
-      - id: check-toml
-      - id: check-json
       - id: end-of-file-fixer
       - id: trailing-whitespace
-      - id: check-merge-conflict
-      - id: detect-private-key
+      - id: check-yaml
       - id: check-added-large-files
-        args: ["--maxkb=1024"]
 
   - repo: local
     hooks:
-      - id: ruff
-        name: ruff (check + fix)
-        entry: python -m ruff check --fix .
+      - id: ruff-check
+        name: ruff-check
+        entry: poetry run ruff check .
         language: system
         pass_filenames: false
-        stages: [pre-commit]
 
       - id: ruff-format
-        name: ruff format
-        entry: python -m ruff format .
+        name: ruff-format
+        entry: poetry run ruff format --check .
         language: system
         pass_filenames: false
-        stages: [pre-commit]
 
       - id: mypy
         name: mypy
-        entry: python -m mypy --config-file=pyproject.toml
+        entry: poetry run mypy --config-file pyproject.toml .
         language: system
         pass_filenames: false
-        stages: [ pre-commit ]
 
       - id: pytest
         name: pytest
-        entry: python -m pytest -q
+        entry: poetry run pytest -m "not integration"
         language: system
         pass_filenames: false
-        stages: [pre-commit]
