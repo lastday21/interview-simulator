@@ -41,6 +41,7 @@ testpaths = ["tests"]
 [tool.mypy]
 python_version = "3.12"
 files = ["app", "tests"]
+plugins = ["pydantic.mypy"]
 
 ignore_missing_imports = true
 
