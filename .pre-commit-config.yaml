@@ -17,7 +17,7 @@ repos:
 
       - id: ruff-format
         name: ruff-format
-        entry: poetry run ruff format --check .
+        entry: poetry run ruff format .
         language: system
         pass_filenames: false
 
