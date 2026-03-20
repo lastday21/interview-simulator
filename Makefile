@@ -1,16 +1,16 @@
 install:
-	\tpoetry install --with dev
+	poetry install --with dev
 
 lint:
-	\tpoetry run ruff check .
-	\tpoetry run ruff format --check .
-	\tpoetry run mypy --config-file pyproject.toml .
+	poetry run ruff check .
+	poetry run ruff format --check .
+	poetry run mypy --config-file pyproject.toml .
 
 test:
-	\tpoetry run pytest -m "not integration"
+	poetry run pytest -m "not integration"
 
 test-integration:
-	\tpoetry run pytest -m "integration"
+	poetry run pytest -m "integration"
 
 precommit-install:
-	\tpoetry run pre-commit install --hook-type pre-push
+	poetry run pre-commit install
