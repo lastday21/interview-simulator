@@ -4,7 +4,7 @@ from typing import Any
 from aiogram import BaseMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import SessionFactory
+from app.db import get_session_factory
 
 
 class DbSessionMiddleware(BaseMiddleware):
@@ -16,7 +16,7 @@ class DbSessionMiddleware(BaseMiddleware):
         event: dict[str, Any],
         data: dict[str, Any],
     ) -> Any:
-        async with SessionFactory() as session:
+        async with get_session_factory()() as session:
             data["session"] = session
             try:
                 result = await handler(event, data)
