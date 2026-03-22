@@ -1,7 +1,8 @@
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 from aiogram import BaseMiddleware
+from aiogram.types import TelegramObject
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session_factory
@@ -12,8 +13,8 @@ class DbSessionMiddleware(BaseMiddleware):
 
     async def __call__(
         self,
-        handler: Callable[[dict[str, Any], dict[str, Any]], Awaitable[Any]],
-        event: dict[str, Any],
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
         data: dict[str, Any],
     ) -> Any:
         async with get_session_factory()() as session:
@@ -28,4 +29,4 @@ class DbSessionMiddleware(BaseMiddleware):
 
 
 def get_session_from_data(data: dict[str, Any]) -> AsyncSession:
-    return data["session"]
+    return cast(AsyncSession, data["session"])
