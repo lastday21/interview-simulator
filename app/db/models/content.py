@@ -17,7 +17,9 @@ class Subtopic(Base):
     __tablename__ = "subtopics"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    topic_id: Mapped[int] = mapped_column(ForeignKey("topics.id", ondelete="CASCADE"), index=True)
+    topic_id: Mapped[int] = mapped_column(
+        ForeignKey("topics.id", ondelete="CASCADE"), index=True
+    )
     title: Mapped[str] = mapped_column(String(255))
     position: Mapped[int] = mapped_column()
 
@@ -29,7 +31,9 @@ class Question(Base):
     __tablename__ = "questions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    subtopic_id: Mapped[int] = mapped_column(ForeignKey("subtopics.id", ondelete="CASCADE"), index=True)
+    subtopic_id: Mapped[int] = mapped_column(
+        ForeignKey("subtopics.id", ondelete="CASCADE"), index=True
+    )
     position: Mapped[int] = mapped_column()
     question_text: Mapped[str] = mapped_column(Text)
     answer_text: Mapped[str] = mapped_column(Text)

@@ -9,11 +9,17 @@ from app.db.base import Base
 class UserQuestionStatus(Base):
     __tablename__ = "user_question_status"
     __table_args__ = (
-        UniqueConstraint("user_id", "question_id", name="uq_user_question_status_user_question"),
+        UniqueConstraint(
+            "user_id", "question_id", name="uq_user_question_status_user_question"
+        ),
     )
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
-    question_id: Mapped[int] = mapped_column(ForeignKey("questions.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    question_id: Mapped[int] = mapped_column(
+        ForeignKey("questions.id", ondelete="CASCADE"), primary_key=True
+    )
     status: Mapped[int] = mapped_column(SmallInteger)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
