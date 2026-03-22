@@ -6,6 +6,7 @@ from app.repositories.interview import (
     InterviewRepository,
 )
 from app.repositories.progress import ProgressRepository
+from app.repositories.user import UserRepository
 
 __all__ = [
     "ContentRepository",
@@ -16,4 +17,5 @@ __all__ = [
     "ProgressRepository",
     "QuestionWithStatus",
     "TopicStats",
+    "UserRepository",
 ]
