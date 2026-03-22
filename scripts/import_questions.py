@@ -9,8 +9,21 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.db import get_session_factory
-from app.services import QuestionImportService, load_question_rows, plan_question_rows
+
+def get_import_dependencies() -> tuple[object, object, object]:
+    from app.db import get_session_factory
+    from app.services import (
+        QuestionImportService,
+        load_question_rows,
+        plan_question_rows,
+    )
+
+    return (
+        get_session_factory,
+        QuestionImportService,
+        (load_question_rows, plan_question_rows),
+    )
+
 
 DEFAULT_DATA_PATH = Path("data/all_question_v1.json")
 
@@ -29,6 +42,11 @@ def parse_args() -> argparse.Namespace:
 
 
 async def main() -> None:
+    get_session_factory, QuestionImportService, import_functions = (
+        get_import_dependencies()
+    )
+    load_question_rows, plan_question_rows = import_functions
+
     args = parse_args()
     rows = load_question_rows(args.path)
     planned_rows, duplicates_skipped = plan_question_rows(rows)
