@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     bot_token: str = Field(..., alias="BOT_TOKEN")
 
     database_url: str = Field(..., alias="DATABASE_URL")
+    redis_url: str = Field("redis://localhost:6379/0", alias="REDIS_URL")
 
 
 @lru_cache(maxsize=1)
