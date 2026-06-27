@@ -1,4 +1,26 @@
 services:
+  bot:
+    build:
+      context: .
+    container_name: interview-simulator-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command:
+      [
+        "sh",
+        "-c",
+        "poetry run alembic upgrade head && poetry run python scripts/import_questions.py && poetry run python -m app.main",
+      ]
+
   db:
     image: postgres:16-alpine
     container_name: interview-simulator-db

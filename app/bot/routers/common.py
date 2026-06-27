@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.callbacks import MAIN_MENU
 from app.bot.keyboards import main_menu_keyboard
+from app.db.models import User
 from app.repositories import UserRepository
 
 router = Router(name="common")
@@ -14,11 +15,11 @@ router = Router(name="common")
 async def ensure_user(
     telegram_user: TelegramUser | None,
     session: AsyncSession,
-) -> None:
+) -> User | None:
     if telegram_user is None:
-        return
+        return None
 
-    await UserRepository(session).upsert_user(
+    return await UserRepository(session).upsert_user(
         telegram_user_id=telegram_user.id,
         username=telegram_user.username,
     )

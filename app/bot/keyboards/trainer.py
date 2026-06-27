@@ -5,7 +5,11 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.bot.callbacks import (
     MAIN_MENU,
+    TRAINER_SELECT_NUMBER,
+    TRAINER_START_BEGIN,
     TRAINER_TOPICS,
+    TrainerQuestionAnswerCallback,
+    TrainerQuestionAnswerTextCallback,
     TrainerSubtopicCallback,
     TrainerTopicCallback,
 )
@@ -76,6 +80,74 @@ def trainer_subtopics_keyboard(
 def trainer_selected_subtopic_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="С начала",
+                    callback_data=TRAINER_START_BEGIN,
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="С конкретного вопроса",
+                    callback_data=TRAINER_SELECT_NUMBER,
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Назад к темам",
+                    callback_data=TRAINER_TOPICS,
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Назад в меню",
+                    callback_data=MAIN_MENU,
+                )
+            ],
+        ]
+    )
+
+
+def trainer_question_keyboard(question_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Знаю",
+                    callback_data=TrainerQuestionAnswerCallback(
+                        question_id=question_id,
+                        status=1,
+                    ).pack(),
+                ),
+                InlineKeyboardButton(
+                    text="Не знаю",
+                    callback_data=TrainerQuestionAnswerCallback(
+                        question_id=question_id,
+                        status=0,
+                    ).pack(),
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Сложно",
+                    callback_data=TrainerQuestionAnswerCallback(
+                        question_id=question_id,
+                        status=-1,
+                    ).pack(),
+                ),
+                InlineKeyboardButton(
+                    text="Ответ",
+                    callback_data=TrainerQuestionAnswerTextCallback(
+                        question_id=question_id,
+                    ).pack(),
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Выбрать другой номер",
+                    callback_data=TRAINER_SELECT_NUMBER,
+                )
+            ],
             [
                 InlineKeyboardButton(
                     text="Назад к темам",

@@ -1,0 +1,11 @@
+.git
+.idea
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.venv
+__pycache__
+*.pyc
+.env
+postgres_data
+redis_data

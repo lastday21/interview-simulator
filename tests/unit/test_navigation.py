@@ -7,13 +7,19 @@ from app.bot.callbacks import (
     MAIN_MENU,
     STATISTICS_MENU,
     TRAINER_MENU,
+    TRAINER_SELECT_NUMBER,
+    TRAINER_START_BEGIN,
     TRAINER_TOPICS,
+    TrainerQuestionAnswerCallback,
+    TrainerQuestionAnswerTextCallback,
     TrainerSubtopicCallback,
     TrainerTopicCallback,
 )
 from app.bot.dispatcher import create_dispatcher
 from app.bot.keyboards import (
     main_menu_keyboard,
+    trainer_question_keyboard,
+    trainer_selected_subtopic_keyboard,
     trainer_subtopics_keyboard,
     trainer_topics_keyboard,
 )
@@ -77,6 +83,37 @@ def test_trainer_subtopics_keyboard_uses_subtopic_callbacks() -> None:
     assert callback_data == [
         TrainerSubtopicCallback(subtopic_id=10).pack(),
         TrainerSubtopicCallback(subtopic_id=11).pack(),
+        TRAINER_TOPICS,
+        MAIN_MENU,
+    ]
+
+
+def test_trainer_selected_subtopic_keyboard_has_start_options() -> None:
+    keyboard = trainer_selected_subtopic_keyboard()
+
+    callback_data = [row[0].callback_data for row in keyboard.inline_keyboard]
+
+    assert callback_data == [
+        TRAINER_START_BEGIN,
+        TRAINER_SELECT_NUMBER,
+        TRAINER_TOPICS,
+        MAIN_MENU,
+    ]
+
+
+def test_trainer_question_keyboard_has_answer_actions() -> None:
+    keyboard = trainer_question_keyboard(question_id=42)
+
+    callback_data = [
+        button.callback_data for row in keyboard.inline_keyboard for button in row
+    ]
+
+    assert callback_data == [
+        TrainerQuestionAnswerCallback(question_id=42, status=1).pack(),
+        TrainerQuestionAnswerCallback(question_id=42, status=0).pack(),
+        TrainerQuestionAnswerCallback(question_id=42, status=-1).pack(),
+        TrainerQuestionAnswerTextCallback(question_id=42).pack(),
+        TRAINER_SELECT_NUMBER,
         TRAINER_TOPICS,
         MAIN_MENU,
     ]
