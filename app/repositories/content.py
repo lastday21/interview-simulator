@@ -42,6 +42,20 @@ class ContentRepository:
         )
         return list(result)
 
+    async def list_subtopics_by_topic_ids(
+        self,
+        topic_ids: list[int],
+    ) -> list[Subtopic]:
+        if not topic_ids:
+            return []
+
+        result = await self._session.scalars(
+            select(Subtopic)
+            .where(Subtopic.topic_id.in_(topic_ids))
+            .order_by(Subtopic.topic_id, Subtopic.position, Subtopic.id)
+        )
+        return list(result)
+
     async def get_next_subtopic_with_questions(
         self,
         current_subtopic_id: int,

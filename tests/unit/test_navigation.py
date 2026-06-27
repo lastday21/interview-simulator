@@ -4,12 +4,18 @@ from aiogram import Dispatcher
 
 from app.bot.callbacks import (
     INTERVIEW_MENU,
+    INTERVIEW_SELECT_ALL_TOPICS,
+    INTERVIEW_START,
+    INTERVIEW_SUBTOPICS,
+    INTERVIEW_TOPICS,
     MAIN_MENU,
     STATISTICS_MENU,
     TRAINER_MENU,
     TRAINER_SELECT_NUMBER,
     TRAINER_START_BEGIN,
     TRAINER_TOPICS,
+    InterviewSubtopicCallback,
+    InterviewTopicCallback,
     TrainerQuestionAnswerCallback,
     TrainerQuestionAnswerTextCallback,
     TrainerSubtopicCallback,
@@ -17,6 +23,8 @@ from app.bot.callbacks import (
 )
 from app.bot.dispatcher import create_dispatcher
 from app.bot.keyboards import (
+    interview_subtopics_keyboard,
+    interview_topics_keyboard,
     main_menu_keyboard,
     trainer_question_keyboard,
     trainer_selected_subtopic_keyboard,
@@ -117,3 +125,68 @@ def test_trainer_question_keyboard_has_answer_actions() -> None:
         TRAINER_TOPICS,
         MAIN_MENU,
     ]
+
+
+def test_interview_topics_keyboard_toggles_topics() -> None:
+    keyboard = interview_topics_keyboard(
+        [
+            KeyboardItem(id=1, title="Python"),
+            KeyboardItem(id=2, title="SQL"),
+        ],
+        selected_topic_ids={1},
+    )
+
+    buttons = [row[0] for row in keyboard.inline_keyboard]
+
+    assert buttons[0].text == "[x] Python"
+    assert buttons[0].callback_data == InterviewTopicCallback(topic_id=1).pack()
+    assert buttons[1].text == "[ ] SQL"
+    assert buttons[1].callback_data == InterviewTopicCallback(topic_id=2).pack()
+    assert [button.callback_data for button in buttons[2:]] == [
+        INTERVIEW_SELECT_ALL_TOPICS,
+        INTERVIEW_SUBTOPICS,
+        MAIN_MENU,
+    ]
+
+
+def test_interview_subtopics_keyboard_shows_start_when_enough_questions() -> None:
+    keyboard = interview_subtopics_keyboard(
+        [
+            KeyboardItem(id=10, title="Asyncio"),
+            KeyboardItem(id=11, title="Typing"),
+        ],
+        excluded_subtopic_ids={11},
+        questions_count=15,
+        minimum_questions=15,
+    )
+
+    buttons = [row[0] for row in keyboard.inline_keyboard]
+
+    assert buttons[0].text == "[x] Asyncio"
+    assert buttons[0].callback_data == InterviewSubtopicCallback(
+        subtopic_id=10
+    ).pack()
+    assert buttons[1].text == "[ ] Typing"
+    assert buttons[1].callback_data == InterviewSubtopicCallback(
+        subtopic_id=11
+    ).pack()
+    assert buttons[2].text == "Начать интервью (15 вопросов)"
+    assert buttons[2].callback_data == INTERVIEW_START
+    assert [button.callback_data for button in buttons[3:]] == [
+        INTERVIEW_TOPICS,
+        MAIN_MENU,
+    ]
+
+
+def test_interview_subtopics_keyboard_blocks_start_when_not_enough_questions() -> None:
+    keyboard = interview_subtopics_keyboard(
+        [KeyboardItem(id=10, title="Asyncio")],
+        excluded_subtopic_ids=set(),
+        questions_count=8,
+        minimum_questions=15,
+    )
+
+    start_button = keyboard.inline_keyboard[1][0]
+
+    assert start_button.text == "Недостаточно вопросов: 8/15"
+    assert start_button.callback_data == INTERVIEW_START

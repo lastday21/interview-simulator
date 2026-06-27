@@ -8,6 +8,10 @@ STATISTICS_MENU = "menu:statistics"
 TRAINER_TOPICS = "trainer:topics"
 TRAINER_START_BEGIN = "trainer:start_begin"
 TRAINER_SELECT_NUMBER = "trainer:select_number"
+INTERVIEW_TOPICS = "interview:topics"
+INTERVIEW_SUBTOPICS = "interview:subtopics"
+INTERVIEW_SELECT_ALL_TOPICS = "interview:select_all_topics"
+INTERVIEW_START = "interview:start"
 
 
 class TrainerTopicCallback(CallbackData, prefix="trainer_topic"):
@@ -25,3 +29,11 @@ class TrainerQuestionAnswerCallback(CallbackData, prefix="trainer_answer"):
 
 class TrainerQuestionAnswerTextCallback(CallbackData, prefix="trainer_answer_text"):
     question_id: int
+
+
+class InterviewTopicCallback(CallbackData, prefix="interview_topic"):
+    topic_id: int
+
+
+class InterviewSubtopicCallback(CallbackData, prefix="interview_subtopic"):
+    subtopic_id: int
