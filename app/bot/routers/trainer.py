@@ -349,11 +349,24 @@ async def handle_trainer_question_answer_callback(
 
     if next_question is None:
         await callback.message.answer("В этой подтеме вопросы закончились.")
+        next_subtopic = await content_repository.get_next_subtopic_with_questions(
+            subtopic_id
+        )
+        if next_subtopic is None:
+            await callback.message.answer(
+                "Это была последняя подтема. Можно выбрать новую тему."
+            )
+            await open_trainer(callback.message, state, session)
+            return
+
+        await callback.message.answer(
+            f"Открываю следующую подтему: {next_subtopic.title}"
+        )
         await open_selected_subtopic(
             callback.message,
             state,
             session,
-            subtopic_id=subtopic_id,
+            subtopic_id=next_subtopic.id,
             user_id=user.id,
         )
         return

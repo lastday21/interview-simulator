@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Question, Subtopic, Topic, UserQuestionStatus
@@ -41,6 +41,51 @@ class ContentRepository:
             .order_by(Subtopic.position, Subtopic.id)
         )
         return list(result)
+
+    async def get_next_subtopic_with_questions(
+        self,
+        current_subtopic_id: int,
+        *,
+        active_only: bool = True,
+    ) -> Subtopic | None:
+        current_subtopic = await self._session.get(Subtopic, current_subtopic_id)
+        if current_subtopic is None:
+            return None
+
+        has_questions = exists(
+            select(Question.id).where(Question.subtopic_id == Subtopic.id)
+        )
+        if active_only:
+            has_questions = exists(
+                select(Question.id).where(
+                    Question.subtopic_id == Subtopic.id,
+                    Question.is_active.is_(True),
+                )
+            )
+
+        query = (
+            select(Subtopic)
+            .join(Topic, Topic.id == Subtopic.topic_id)
+            .where(has_questions)
+            .where(
+                or_(
+                    Subtopic.topic_id > current_subtopic.topic_id,
+                    and_(
+                        Subtopic.topic_id == current_subtopic.topic_id,
+                        or_(
+                            Subtopic.position > current_subtopic.position,
+                            and_(
+                                Subtopic.position == current_subtopic.position,
+                                Subtopic.id > current_subtopic.id,
+                            ),
+                        ),
+                    ),
+                )
+            )
+            .order_by(Topic.id, Subtopic.position, Subtopic.id)
+            .limit(1)
+        )
+        return await self._session.scalar(query)
 
     async def list_questions(
         self,
