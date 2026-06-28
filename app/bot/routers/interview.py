@@ -12,11 +12,13 @@ from app.bot.callbacks import (
     INTERVIEW_START,
     INTERVIEW_SUBTOPICS,
     INTERVIEW_TOPICS,
+    InterviewAnswerCallback,
     InterviewSubtopicCallback,
     InterviewTopicCallback,
 )
 from app.bot.fsm import InterviewStates
 from app.bot.keyboards import (
+    interview_question_keyboard,
     interview_reset_active_keyboard,
     interview_subtopics_keyboard,
     interview_topics_keyboard,
@@ -28,6 +30,14 @@ from app.repositories import ContentRepository, InterviewRepository
 router = Router(name="interview")
 
 INTERVIEW_QUESTIONS_COUNT = 15
+
+
+def _status_label(status: int) -> str:
+    if status == 1:
+        return "Знаю"
+    if status == 0:
+        return "Не знаю"
+    return "Сложно"
 
 
 def _int_set_from_state(data: dict[str, object], key: str) -> set[int]:
@@ -185,6 +195,33 @@ async def open_interview_subtopics(
     )
 
 
+async def open_current_interview_question(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    user_id: int,
+) -> None:
+    current_question = await InterviewRepository(session).get_current_question(user_id)
+    await state.set_state(InterviewStates.active)
+
+    if current_question is None:
+        await state.update_data(current_interview_question_id=None)
+        await message.answer(
+            "В активном собеседовании нет текущего вопроса. "
+            "Завершение и история будут следующим шагом."
+        )
+        return
+
+    await state.update_data(current_interview_question_id=current_question.question_id)
+    await message.answer(
+        f"Вопрос {current_question.position}/{current_question.total_questions}\n"
+        f"{current_question.topic_title} / {current_question.subtopic_title}\n\n"
+        f"{current_question.question_text}",
+        reply_markup=interview_question_keyboard(current_question.question_id),
+    )
+
+
 @router.message(Command("interview"))
 async def handle_interview_command(
     message: Message,
@@ -301,8 +338,13 @@ async def handle_interview_start_callback(
     await state.set_state(InterviewStates.active)
     await state.update_data(active_interview_question_ids=question_ids)
     await callback.message.answer(
-        f"Собеседование начато: {INTERVIEW_QUESTIONS_COUNT} вопросов. "
-        "Показ первого вопроса будет следующим шагом."
+        f"Собеседование начато: {INTERVIEW_QUESTIONS_COUNT} вопросов."
+    )
+    await open_current_interview_question(
+        callback.message,
+        state,
+        session,
+        user_id=user.id,
     )
 
 
@@ -360,7 +402,13 @@ async def handle_interview_reset_active_callback(
     )
     await callback.message.answer(
         f"Старое собеседование сброшено. Новое начато: "
-        f"{INTERVIEW_QUESTIONS_COUNT} вопросов. Показ первого вопроса будет следующим шагом."
+        f"{INTERVIEW_QUESTIONS_COUNT} вопросов."
+    )
+    await open_current_interview_question(
+        callback.message,
+        state,
+        session,
+        user_id=user.id,
     )
 
 
@@ -368,14 +416,78 @@ async def handle_interview_reset_active_callback(
 async def handle_interview_keep_active_callback(
     callback: CallbackQuery,
     state: FSMContext,
+    session: AsyncSession,
 ) -> None:
     await callback.answer()
+    user = await ensure_user(callback.from_user, session)
+    if user is None:
+        if isinstance(callback.message, Message):
+            await callback.message.answer("Не удалось определить пользователя.")
+        return
+
     await state.set_state(InterviewStates.active)
     await state.update_data(pending_interview_question_ids=[])
     if isinstance(callback.message, Message):
-        await callback.message.answer(
-            "Текущее собеседование сохранено. Показ текущего вопроса будет следующим шагом."
+        await callback.message.answer("Текущее собеседование сохранено.")
+        await open_current_interview_question(
+            callback.message,
+            state,
+            session,
+            user_id=user.id,
         )
+
+
+@router.callback_query(InterviewAnswerCallback.filter())
+async def handle_interview_answer_callback(
+    callback: CallbackQuery,
+    callback_data: InterviewAnswerCallback,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    await callback.answer()
+    if not isinstance(callback.message, Message):
+        return
+
+    if callback_data.status not in {-1, 0, 1}:
+        await callback.message.answer("Некорректный статус ответа.")
+        return
+
+    user = await ensure_user(callback.from_user, session)
+    if user is None:
+        await callback.message.answer("Не удалось определить пользователя.")
+        return
+
+    result = await InterviewRepository(session).answer_question(
+        user_id=user.id,
+        question_id=callback_data.question_id,
+        status=callback_data.status,
+    )
+    if result.already_answered:
+        await callback.message.answer("Этот вопрос уже был отвечен.")
+        return
+    if not result.is_current_question:
+        await callback.message.answer("Это не текущий вопрос собеседования.")
+        return
+    if not result.accepted:
+        await callback.message.answer("Не удалось сохранить ответ.")
+        return
+
+    await callback.message.answer(
+        f"Ответ сохранен: {_status_label(callback_data.status)}."
+    )
+    if result.completed:
+        await state.update_data(current_interview_question_id=None)
+        await callback.message.answer(
+            "Все 15 вопросов отвечены. Завершение и результат будут следующим шагом."
+        )
+        return
+
+    await open_current_interview_question(
+        callback.message,
+        state,
+        session,
+        user_id=user.id,
+    )
 
 
 @router.callback_query(InterviewTopicCallback.filter())

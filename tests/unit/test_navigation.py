@@ -16,6 +16,7 @@ from app.bot.callbacks import (
     TRAINER_SELECT_NUMBER,
     TRAINER_START_BEGIN,
     TRAINER_TOPICS,
+    InterviewAnswerCallback,
     InterviewSubtopicCallback,
     InterviewTopicCallback,
     TrainerQuestionAnswerCallback,
@@ -25,6 +26,7 @@ from app.bot.callbacks import (
 )
 from app.bot.dispatcher import create_dispatcher
 from app.bot.keyboards import (
+    interview_question_keyboard,
     interview_reset_active_keyboard,
     interview_subtopics_keyboard,
     interview_topics_keyboard,
@@ -200,4 +202,18 @@ def test_interview_reset_active_keyboard_requires_explicit_choice() -> None:
         INTERVIEW_RESET_ACTIVE,
         INTERVIEW_KEEP_ACTIVE,
         INTERVIEW_SUBTOPICS,
+    ]
+
+
+def test_interview_question_keyboard_has_only_status_actions() -> None:
+    keyboard = interview_question_keyboard(question_id=77)
+
+    callback_data = [
+        button.callback_data for row in keyboard.inline_keyboard for button in row
+    ]
+
+    assert callback_data == [
+        InterviewAnswerCallback(question_id=77, status=1).pack(),
+        InterviewAnswerCallback(question_id=77, status=0).pack(),
+        InterviewAnswerCallback(question_id=77, status=-1).pack(),
     ]

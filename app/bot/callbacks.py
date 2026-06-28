@@ -39,3 +39,8 @@ class InterviewTopicCallback(CallbackData, prefix="interview_topic"):
 
 class InterviewSubtopicCallback(CallbackData, prefix="interview_subtopic"):
     subtopic_id: int
+
+
+class InterviewAnswerCallback(CallbackData, prefix="interview_answer"):
+    question_id: int
+    status: int

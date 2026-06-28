@@ -1,4 +1,5 @@
 from app.bot.keyboards.interview import (
+    interview_question_keyboard,
     interview_reset_active_keyboard,
     interview_subtopics_keyboard,
     interview_topics_keyboard,
@@ -12,6 +13,7 @@ from app.bot.keyboards.trainer import (
 )
 
 __all__ = [
+    "interview_question_keyboard",
     "interview_reset_active_keyboard",
     "interview_subtopics_keyboard",
     "interview_topics_keyboard",

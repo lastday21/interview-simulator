@@ -11,6 +11,7 @@ from app.bot.callbacks import (
     INTERVIEW_SUBTOPICS,
     INTERVIEW_TOPICS,
     MAIN_MENU,
+    InterviewAnswerCallback,
     InterviewSubtopicCallback,
     InterviewTopicCallback,
 )
@@ -131,6 +132,38 @@ def interview_reset_active_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="Назад к подтемам",
                     callback_data=INTERVIEW_SUBTOPICS,
+                )
+            ],
+        ]
+    )
+
+
+def interview_question_keyboard(question_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Знаю",
+                    callback_data=InterviewAnswerCallback(
+                        question_id=question_id,
+                        status=1,
+                    ).pack(),
+                ),
+                InlineKeyboardButton(
+                    text="Не знаю",
+                    callback_data=InterviewAnswerCallback(
+                        question_id=question_id,
+                        status=0,
+                    ).pack(),
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Сложно",
+                    callback_data=InterviewAnswerCallback(
+                        question_id=question_id,
+                        status=-1,
+                    ).pack(),
                 )
             ],
         ]
