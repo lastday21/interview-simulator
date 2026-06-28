@@ -25,7 +25,7 @@ from app.bot.keyboards import (
 )
 from app.bot.keyboards.navigation import back_to_main_menu_keyboard
 from app.bot.routers.common import ensure_user
-from app.repositories import ContentRepository, InterviewRepository
+from app.repositories import ContentRepository, InterviewRepository, ProgressRepository
 
 router = Router(name="interview")
 
@@ -38,6 +38,62 @@ def _status_label(status: int) -> str:
     if status == 0:
         return "Не знаю"
     return "Сложно"
+
+
+def _format_completion_result(
+    *,
+    total_questions: int,
+    know_count: int,
+    unknown_count: int,
+    difficult_count: int,
+    passed: bool,
+) -> str:
+    verdict = "Пройдено" if passed else "Не пройдено"
+    return (
+        "Собеседование завершено.\n\n"
+        f"Знаю: {know_count}/{total_questions}\n"
+        f"Не знаю: {unknown_count}/{total_questions}\n"
+        f"Сложно: {difficult_count}/{total_questions}\n\n"
+        f"Вердикт: {verdict}"
+    )
+
+
+async def finish_active_interview(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    user_id: int,
+) -> None:
+    completion = await InterviewRepository(session).finish_interview(user_id=user_id)
+    if completion is None:
+        await message.answer("Собеседование еще не завершено.")
+        return
+
+    progress_repository = ProgressRepository(session)
+    for question_id, status in completion.question_statuses:
+        await progress_repository.upsert_question_status(
+            user_id=user_id,
+            question_id=question_id,
+            status=status,
+        )
+
+    unknown_count = sum(1 for _, status in completion.question_statuses if status == 0)
+    difficult_count = sum(
+        1 for _, status in completion.question_statuses if status == -1
+    )
+
+    await state.clear()
+    await message.answer(
+        _format_completion_result(
+            total_questions=completion.total_questions,
+            know_count=completion.know_count,
+            unknown_count=unknown_count,
+            difficult_count=difficult_count,
+            passed=completion.passed,
+        ),
+        reply_markup=back_to_main_menu_keyboard(),
+    )
 
 
 def _int_set_from_state(data: dict[str, object], key: str) -> set[int]:
@@ -207,10 +263,7 @@ async def open_current_interview_question(
 
     if current_question is None:
         await state.update_data(current_interview_question_id=None)
-        await message.answer(
-            "В активном собеседовании нет текущего вопроса. "
-            "Завершение и история будут следующим шагом."
-        )
+        await finish_active_interview(message, state, session, user_id=user_id)
         return
 
     await state.update_data(current_interview_question_id=current_question.question_id)
@@ -477,8 +530,11 @@ async def handle_interview_answer_callback(
     )
     if result.completed:
         await state.update_data(current_interview_question_id=None)
-        await callback.message.answer(
-            "Все 15 вопросов отвечены. Завершение и результат будут следующим шагом."
+        await finish_active_interview(
+            callback.message,
+            state,
+            session,
+            user_id=user.id,
         )
         return
 
