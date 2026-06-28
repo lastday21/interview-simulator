@@ -4,6 +4,8 @@ from aiogram import Dispatcher
 
 from app.bot.callbacks import (
     INTERVIEW_MENU,
+    INTERVIEW_KEEP_ACTIVE,
+    INTERVIEW_RESET_ACTIVE,
     INTERVIEW_SELECT_ALL_TOPICS,
     INTERVIEW_START,
     INTERVIEW_SUBTOPICS,
@@ -23,6 +25,7 @@ from app.bot.callbacks import (
 )
 from app.bot.dispatcher import create_dispatcher
 from app.bot.keyboards import (
+    interview_reset_active_keyboard,
     interview_subtopics_keyboard,
     interview_topics_keyboard,
     main_menu_keyboard,
@@ -163,13 +166,9 @@ def test_interview_subtopics_keyboard_shows_start_when_enough_questions() -> Non
     buttons = [row[0] for row in keyboard.inline_keyboard]
 
     assert buttons[0].text == "[x] Asyncio"
-    assert buttons[0].callback_data == InterviewSubtopicCallback(
-        subtopic_id=10
-    ).pack()
+    assert buttons[0].callback_data == InterviewSubtopicCallback(subtopic_id=10).pack()
     assert buttons[1].text == "[ ] Typing"
-    assert buttons[1].callback_data == InterviewSubtopicCallback(
-        subtopic_id=11
-    ).pack()
+    assert buttons[1].callback_data == InterviewSubtopicCallback(subtopic_id=11).pack()
     assert buttons[2].text == "Начать интервью (15 вопросов)"
     assert buttons[2].callback_data == INTERVIEW_START
     assert [button.callback_data for button in buttons[3:]] == [
@@ -190,3 +189,15 @@ def test_interview_subtopics_keyboard_blocks_start_when_not_enough_questions() -
 
     assert start_button.text == "Недостаточно вопросов: 8/15"
     assert start_button.callback_data == INTERVIEW_START
+
+
+def test_interview_reset_active_keyboard_requires_explicit_choice() -> None:
+    keyboard = interview_reset_active_keyboard()
+
+    callback_data = [row[0].callback_data for row in keyboard.inline_keyboard]
+
+    assert callback_data == [
+        INTERVIEW_RESET_ACTIVE,
+        INTERVIEW_KEEP_ACTIVE,
+        INTERVIEW_SUBTOPICS,
+    ]

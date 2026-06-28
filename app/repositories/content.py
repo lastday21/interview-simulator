@@ -202,6 +202,28 @@ class ContentRepository:
         result = await self._session.scalar(query)
         return int(result or 0)
 
+    async def select_interview_question_ids(
+        self,
+        *,
+        subtopic_ids: list[int],
+        limit: int,
+        active_only: bool = True,
+    ) -> list[int]:
+        if not subtopic_ids or limit <= 0:
+            return []
+
+        query = (
+            select(Question.id)
+            .where(Question.subtopic_id.in_(subtopic_ids))
+            .order_by(func.random())
+            .limit(limit)
+        )
+        if active_only:
+            query = query.where(Question.is_active.is_(True))
+
+        result = await self._session.scalars(query)
+        return list(result)
+
     async def get_topic_stats(self, user_id: int) -> list[TopicStats]:
         query = (
             select(

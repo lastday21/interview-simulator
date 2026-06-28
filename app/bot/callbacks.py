@@ -12,6 +12,8 @@ INTERVIEW_TOPICS = "interview:topics"
 INTERVIEW_SUBTOPICS = "interview:subtopics"
 INTERVIEW_SELECT_ALL_TOPICS = "interview:select_all_topics"
 INTERVIEW_START = "interview:start"
+INTERVIEW_RESET_ACTIVE = "interview:reset_active"
+INTERVIEW_KEEP_ACTIVE = "interview:keep_active"
 
 
 class TrainerTopicCallback(CallbackData, prefix="trainer_topic"):

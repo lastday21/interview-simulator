@@ -132,7 +132,9 @@ async def open_subtopics(
         await state.set_data({})
         await message.answer(
             "В этой теме пока нет подтем.",
-            reply_markup=trainer_topics_keyboard(await content_repository.list_topics()),
+            reply_markup=trainer_topics_keyboard(
+                await content_repository.list_topics()
+            ),
         )
         return
 
@@ -345,7 +347,9 @@ async def handle_trainer_question_answer_callback(
         subtopic_id=subtopic_id,
         current_position=question.position,
     )
-    await callback.message.answer(f"Статус сохранен: {_status_label(callback_data.status)}.")
+    await callback.message.answer(
+        f"Статус сохранен: {_status_label(callback_data.status)}."
+    )
 
     if next_question is None:
         await callback.message.answer("В этой подтеме вопросы закончились.")
