@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import Float, cast, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import InterviewItem, InterviewSession, Question, Subtopic, Topic
@@ -42,6 +42,13 @@ class InterviewCompletionResult:
     question_statuses: list[tuple[int, int]]
 
 
+@dataclass(slots=True, frozen=True)
+class InterviewStats:
+    completed_count: int
+    average_know_count: float
+    passed_percent: float
+
+
 class InterviewRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -54,6 +61,24 @@ class InterviewRepository:
             select(InterviewItem.id).where(InterviewItem.user_id == user_id)
         )
         return len(result.all())
+
+    async def get_completed_stats(self, user_id: int) -> InterviewStats:
+        row = await self._session.execute(
+            select(
+                func.count(InterviewSession.id),
+                func.coalesce(func.avg(InterviewSession.correct_count), 0),
+                func.coalesce(
+                    func.avg(cast(InterviewSession.passed, Float)),
+                    0,
+                ),
+            ).where(InterviewSession.user_id == user_id)
+        )
+        completed_count, average_know_count, passed_ratio = row.one()
+        return InterviewStats(
+            completed_count=int(completed_count or 0),
+            average_know_count=float(average_know_count or 0),
+            passed_percent=float(passed_ratio or 0) * 100,
+        )
 
     async def clear_active_interview(self, user_id: int) -> None:
         await self._session.execute(

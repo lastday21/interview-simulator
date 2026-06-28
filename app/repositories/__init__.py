@@ -4,6 +4,7 @@ from app.repositories.interview import (
     InterviewCompletionResult,
     InterviewQuestionView,
     InterviewRepository,
+    InterviewStats,
 )
 from app.repositories.progress import ProgressRepository
 from app.repositories.user import UserRepository
@@ -14,6 +15,7 @@ __all__ = [
     "InterviewCompletionResult",
     "InterviewQuestionView",
     "InterviewRepository",
+    "InterviewStats",
     "ProgressRepository",
     "QuestionWithStatus",
     "TopicStats",
