@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import Float, cast, delete, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import InterviewItem, InterviewSession, Question, Subtopic, Topic
@@ -49,6 +49,15 @@ class InterviewStats:
     passed_percent: float
 
 
+def _completed_stats_query(user_id: int):
+    passed_score = case((InterviewSession.passed.is_(True), 1.0), else_=0.0)
+    return select(
+        func.count(InterviewSession.id),
+        func.coalesce(func.avg(InterviewSession.correct_count), 0),
+        func.coalesce(func.avg(passed_score), 0),
+    ).where(InterviewSession.user_id == user_id)
+
+
 class InterviewRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -63,16 +72,7 @@ class InterviewRepository:
         return len(result.all())
 
     async def get_completed_stats(self, user_id: int) -> InterviewStats:
-        row = await self._session.execute(
-            select(
-                func.count(InterviewSession.id),
-                func.coalesce(func.avg(InterviewSession.correct_count), 0),
-                func.coalesce(
-                    func.avg(cast(InterviewSession.passed, Float)),
-                    0,
-                ),
-            ).where(InterviewSession.user_id == user_id)
-        )
+        row = await self._session.execute(_completed_stats_query(user_id))
         completed_count, average_know_count, passed_ratio = row.one()
         return InterviewStats(
             completed_count=int(completed_count or 0),

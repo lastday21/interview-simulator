@@ -1,4 +1,7 @@
+from sqlalchemy.dialects import postgresql
+
 from app.bot.routers.interview import _format_completion_result
+from app.repositories.interview import _completed_stats_query
 
 
 def test_format_completion_result_passed() -> None:
@@ -25,3 +28,10 @@ def test_format_completion_result_failed() -> None:
         difficult_count=1,
         passed=False,
     )
+
+
+def test_completed_stats_query_uses_postgresql_safe_boolean_average() -> None:
+    compiled = str(_completed_stats_query(1).compile(dialect=postgresql.dialect()))
+
+    assert "CASE WHEN" in compiled
+    assert "CAST(interview_sessions.passed AS FLOAT" not in compiled
