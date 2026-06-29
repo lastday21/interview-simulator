@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.callbacks import (
     INTERVIEW_KEEP_ACTIVE,
     INTERVIEW_MENU,
+    INTERVIEW_NEW_SELECTION,
     INTERVIEW_RESET_ACTIVE,
     INTERVIEW_SELECT_ALL_TOPICS,
     INTERVIEW_START,
@@ -18,12 +19,14 @@ from app.bot.callbacks import (
 )
 from app.bot.fsm import InterviewStates
 from app.bot.keyboards import (
+    interview_active_keyboard,
     interview_question_keyboard,
     interview_reset_active_keyboard,
     interview_subtopics_keyboard,
     interview_topics_keyboard,
 )
 from app.bot.keyboards.navigation import back_to_main_menu_keyboard
+from app.bot.messages import answer_split
 from app.bot.routers.common import ensure_user
 from app.repositories import ContentRepository, InterviewRepository, ProgressRepository
 
@@ -84,7 +87,8 @@ async def finish_active_interview(
     )
 
     await state.clear()
-    await message.answer(
+    await answer_split(
+        message,
         _format_completion_result(
             total_questions=completion.total_questions,
             know_count=completion.know_count,
@@ -155,7 +159,7 @@ async def _selected_topic_ids_from_state(
     return selected_topic_ids
 
 
-async def open_interview(
+async def open_interview_selection(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
     topics = await ContentRepository(session).list_topics()
@@ -174,13 +178,33 @@ async def open_interview(
         )
         return
 
-    await message.answer(
+    await answer_split(
+        message,
         "Собеседование: выбери темы. По умолчанию включены все темы.",
         reply_markup=interview_topics_keyboard(
             topics,
             selected_topic_ids={topic.id for topic in topics},
         ),
     )
+
+
+async def open_interview(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    user_id: int,
+) -> None:
+    if await InterviewRepository(session).has_active_interview(user_id):
+        await state.set_state(InterviewStates.active)
+        await state.update_data(pending_interview_question_ids=[])
+        await message.answer(
+            "У тебя есть незавершённое собеседование. Продолжить его или выбрать новый набор вопросов?",
+            reply_markup=interview_active_keyboard(),
+        )
+        return
+
+    await open_interview_selection(message, state, session)
 
 
 async def open_interview_topics(
@@ -267,7 +291,8 @@ async def open_current_interview_question(
         return
 
     await state.update_data(current_interview_question_id=current_question.question_id)
-    await message.answer(
+    await answer_split(
+        message,
         f"Вопрос {current_question.position}/{current_question.total_questions}\n"
         f"{current_question.topic_title} / {current_question.subtopic_title}\n\n"
         f"{current_question.question_text}",
@@ -282,8 +307,11 @@ async def handle_interview_command(
     session: AsyncSession,
 ) -> None:
     await state.clear()
-    await ensure_user(message.from_user, session)
-    await open_interview(message, state, session)
+    user = await ensure_user(message.from_user, session)
+    if user is None:
+        await message.answer("Не удалось определить пользователя.")
+        return
+    await open_interview(message, state, session, user_id=user.id)
 
 
 @router.callback_query(F.data == INTERVIEW_MENU)
@@ -293,10 +321,25 @@ async def handle_interview_callback(
     session: AsyncSession,
 ) -> None:
     await state.clear()
-    await ensure_user(callback.from_user, session)
+    user = await ensure_user(callback.from_user, session)
+    await callback.answer()
+    if user is None:
+        if isinstance(callback.message, Message):
+            await callback.message.answer("Не удалось определить пользователя.")
+        return
+    if isinstance(callback.message, Message):
+        await open_interview(callback.message, state, session, user_id=user.id)
+
+
+@router.callback_query(F.data == INTERVIEW_NEW_SELECTION)
+async def handle_interview_new_selection_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
     await callback.answer()
     if isinstance(callback.message, Message):
-        await open_interview(callback.message, state, session)
+        await open_interview_selection(callback.message, state, session)
 
 
 @router.callback_query(F.data == INTERVIEW_TOPICS)

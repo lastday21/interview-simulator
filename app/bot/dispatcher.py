@@ -3,6 +3,7 @@ from aiogram import Dispatcher
 from app.bot.middlewares import DbSessionMiddleware
 from app.bot.routers import (
     common_router,
+    errors_router,
     interview_router,
     statistics_router,
     trainer_router,
@@ -18,5 +19,6 @@ def create_dispatcher(redis_url: str | None = None) -> Dispatcher:
         trainer_router,
         interview_router,
         statistics_router,
+        errors_router,
     )
     return dispatcher

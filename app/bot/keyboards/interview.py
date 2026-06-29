@@ -5,6 +5,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.bot.callbacks import (
     INTERVIEW_KEEP_ACTIVE,
+    INTERVIEW_NEW_SELECTION,
     INTERVIEW_RESET_ACTIVE,
     INTERVIEW_SELECT_ALL_TOPICS,
     INTERVIEW_START,
@@ -132,6 +133,31 @@ def interview_reset_active_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="Назад к подтемам",
                     callback_data=INTERVIEW_SUBTOPICS,
+                )
+            ],
+        ]
+    )
+
+
+def interview_active_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Продолжить текущее",
+                    callback_data=INTERVIEW_KEEP_ACTIVE,
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Выбрать новое",
+                    callback_data=INTERVIEW_NEW_SELECTION,
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Назад в меню",
+                    callback_data=MAIN_MENU,
                 )
             ],
         ]

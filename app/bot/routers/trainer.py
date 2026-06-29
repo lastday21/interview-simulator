@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from aiogram import F, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.callbacks import (
@@ -23,13 +23,13 @@ from app.bot.keyboards import (
     trainer_subtopics_keyboard,
     trainer_topics_keyboard,
 )
+from app.bot.messages import answer_split
 from app.bot.routers.common import ensure_user
 from app.db.models import Question
 from app.repositories import ContentRepository, ProgressRepository, QuestionWithStatus
 
 router = Router(name="trainer")
 
-TELEGRAM_MESSAGE_LIMIT = 3900
 QUESTION_PREVIEW_LIMIT = 100
 
 
@@ -63,38 +63,6 @@ def format_trainer_questions_list(
         for item in questions
     )
     return "\n".join(lines)
-
-
-def _split_message(text: str) -> list[str]:
-    chunks: list[str] = []
-    current = ""
-
-    for line in text.splitlines():
-        next_part = line if not current else f"{current}\n{line}"
-        if len(next_part) <= TELEGRAM_MESSAGE_LIMIT:
-            current = next_part
-            continue
-
-        if current:
-            chunks.append(current)
-        current = line
-
-    if current:
-        chunks.append(current)
-
-    return chunks or [""]
-
-
-async def _answer_split(
-    message: Message,
-    text: str,
-    *,
-    reply_markup: InlineKeyboardMarkup | None = None,
-) -> None:
-    chunks = _split_message(text)
-    for index, chunk in enumerate(chunks):
-        markup = reply_markup if index == len(chunks) - 1 else None
-        await message.answer(chunk, reply_markup=markup)
 
 
 async def open_trainer(
@@ -163,7 +131,7 @@ async def open_selected_subtopic(
         current_question_position=None,
     )
 
-    await _answer_split(
+    await answer_split(
         message,
         format_trainer_questions_list(questions),
         reply_markup=trainer_selected_subtopic_keyboard(),
@@ -180,7 +148,7 @@ async def open_question(
         current_question_id=question.id,
         current_question_position=question.position,
     )
-    await _answer_split(
+    await answer_split(
         message,
         f"Вопрос {question.position}\n\n{question.question_text}",
         reply_markup=trainer_question_keyboard(question.id),
@@ -292,7 +260,7 @@ async def handle_trainer_answer_text_callback(
         await callback.message.answer("Вопрос не найден.")
         return
 
-    await _answer_split(
+    await answer_split(
         callback.message,
         f"Ответ на вопрос {question.position}\n\n{question.answer_text}",
         reply_markup=trainer_question_keyboard(question.id),

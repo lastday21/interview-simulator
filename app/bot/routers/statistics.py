@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.callbacks import STATISTICS_MENU
 from app.bot.fsm import StatisticsStates
 from app.bot.keyboards.navigation import back_to_main_menu_keyboard
+from app.bot.messages import answer_split
 from app.bot.routers.common import ensure_user
 from app.repositories import (
     ContentRepository,
@@ -58,7 +59,8 @@ async def open_statistics(
 
     topic_stats = await ContentRepository(session).get_topic_stats(user_id)
     interview_stats = await InterviewRepository(session).get_completed_stats(user_id)
-    await message.answer(
+    await answer_split(
+        message,
         f"{format_topic_stats(topic_stats)}\n\n{format_interview_stats(interview_stats)}",
         reply_markup=back_to_main_menu_keyboard(),
     )

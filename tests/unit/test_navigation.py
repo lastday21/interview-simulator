@@ -5,6 +5,7 @@ from aiogram import Dispatcher
 from app.bot.callbacks import (
     INTERVIEW_MENU,
     INTERVIEW_KEEP_ACTIVE,
+    INTERVIEW_NEW_SELECTION,
     INTERVIEW_RESET_ACTIVE,
     INTERVIEW_SELECT_ALL_TOPICS,
     INTERVIEW_START,
@@ -26,6 +27,7 @@ from app.bot.callbacks import (
 )
 from app.bot.dispatcher import create_dispatcher
 from app.bot.keyboards import (
+    interview_active_keyboard,
     interview_question_keyboard,
     interview_reset_active_keyboard,
     interview_subtopics_keyboard,
@@ -63,6 +65,7 @@ def test_create_dispatcher_registers_routers() -> None:
         "trainer",
         "interview",
         "statistics",
+        "errors",
     }
 
 
@@ -202,6 +205,18 @@ def test_interview_reset_active_keyboard_requires_explicit_choice() -> None:
         INTERVIEW_RESET_ACTIVE,
         INTERVIEW_KEEP_ACTIVE,
         INTERVIEW_SUBTOPICS,
+    ]
+
+
+def test_interview_active_keyboard_offers_resume_or_new_selection() -> None:
+    keyboard = interview_active_keyboard()
+
+    callback_data = [row[0].callback_data for row in keyboard.inline_keyboard]
+
+    assert callback_data == [
+        INTERVIEW_KEEP_ACTIVE,
+        INTERVIEW_NEW_SELECTION,
+        MAIN_MENU,
     ]
 
 
