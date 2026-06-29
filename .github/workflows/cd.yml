@@ -30,14 +30,19 @@ jobs:
         shell: powershell
         env:
           PRODUCTION_ENV: ${{ secrets.PRODUCTION_ENV }}
+          PRODUCTION_ENV_FILE: "F:\\actions-runner\\secrets\\interview-simulator.env"
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:PRODUCTION_ENV)) {
-            throw "Missing production secret: PRODUCTION_ENV"
-          }
-
           $envPath = Join-Path $PWD ".env"
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::WriteAllText($envPath, $env:PRODUCTION_ENV, $utf8NoBom)
+          if (-not [string]::IsNullOrWhiteSpace($env:PRODUCTION_ENV)) {
+            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            [System.IO.File]::WriteAllText($envPath, $env:PRODUCTION_ENV, $utf8NoBom)
+          }
+          elseif (Test-Path $env:PRODUCTION_ENV_FILE) {
+            Copy-Item -LiteralPath $env:PRODUCTION_ENV_FILE -Destination $envPath -Force
+          }
+          else {
+            throw "Missing production environment: set GitHub secret PRODUCTION_ENV or create $env:PRODUCTION_ENV_FILE"
+          }
 
       - name: Deploy
         shell: powershell
