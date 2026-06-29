@@ -1,0 +1,44 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: ["main"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to local Docker server
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: [self-hosted, Windows, X64]
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Write production environment
+        shell: powershell
+        env:
+          PRODUCTION_ENV: ${{ secrets.PRODUCTION_ENV }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:PRODUCTION_ENV)) {
+            throw "Missing production secret: PRODUCTION_ENV"
+          }
+
+          $envPath = Join-Path $PWD ".env"
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          [System.IO.File]::WriteAllText($envPath, $env:PRODUCTION_ENV, $utf8NoBom)
+
+      - name: Deploy
+        shell: powershell
+        run: .\scripts\deploy.ps1 -ProjectPath "$PWD"
