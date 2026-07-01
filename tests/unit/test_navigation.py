@@ -14,6 +14,7 @@ from app.bot.callbacks import (
     MAIN_MENU,
     STATISTICS_MENU,
     TRAINER_MENU,
+    TRAINER_REVIEW_WEAK,
     TRAINER_SELECT_NUMBER,
     TRAINER_START_BEGIN,
     TRAINER_TOPICS,
@@ -82,6 +83,7 @@ def test_trainer_topics_keyboard_uses_topic_callbacks() -> None:
     assert callback_data == [
         TrainerTopicCallback(topic_id=1).pack(),
         TrainerTopicCallback(topic_id=2).pack(),
+        TRAINER_REVIEW_WEAK,
         MAIN_MENU,
     ]
 
@@ -130,6 +132,24 @@ def test_trainer_question_keyboard_has_answer_actions() -> None:
         TrainerQuestionAnswerCallback(question_id=42, status=-1).pack(),
         TrainerQuestionAnswerTextCallback(question_id=42).pack(),
         TRAINER_SELECT_NUMBER,
+        TRAINER_TOPICS,
+        MAIN_MENU,
+    ]
+
+
+def test_trainer_question_keyboard_can_hide_number_selection() -> None:
+    keyboard = trainer_question_keyboard(question_id=42, show_select_number=False)
+
+    callback_data = [
+        button.callback_data for row in keyboard.inline_keyboard for button in row
+    ]
+
+    assert TRAINER_SELECT_NUMBER not in callback_data
+    assert callback_data == [
+        TrainerQuestionAnswerCallback(question_id=42, status=1).pack(),
+        TrainerQuestionAnswerCallback(question_id=42, status=0).pack(),
+        TrainerQuestionAnswerCallback(question_id=42, status=-1).pack(),
+        TrainerQuestionAnswerTextCallback(question_id=42).pack(),
         TRAINER_TOPICS,
         MAIN_MENU,
     ]

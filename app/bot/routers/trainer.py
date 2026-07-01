@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.callbacks import (
     TRAINER_MENU,
+    TRAINER_REVIEW_WEAK,
     TRAINER_SELECT_NUMBER,
     TRAINER_START_BEGIN,
     TRAINER_TOPICS,
@@ -169,6 +170,87 @@ def _current_question_id_from_state(data: dict[str, object]) -> int | None:
     return None
 
 
+def _weak_question_ids_from_state(data: dict[str, object]) -> list[int]:
+    value = data.get("weak_question_ids")
+    if not isinstance(value, list):
+        return []
+
+    return [item for item in value if isinstance(item, int)]
+
+
+def _weak_question_index_from_state(data: dict[str, object]) -> int:
+    value = data.get("weak_question_index")
+    if isinstance(value, int) and value >= 0:
+        return value
+    return 0
+
+
+async def open_weak_question(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    question_ids: list[int],
+    index: int,
+) -> None:
+    if index >= len(question_ids):
+        await message.answer("Повтор слабых вопросов завершён.")
+        await open_trainer(message, state, session)
+        return
+
+    question = await ContentRepository(session).get_question(question_ids[index])
+    if question is None:
+        await state.update_data(weak_question_index=index + 1)
+        await open_weak_question(
+            message,
+            state,
+            session,
+            question_ids=question_ids,
+            index=index + 1,
+        )
+        return
+
+    await state.set_state(TrainerStates.question)
+    await state.update_data(
+        current_question_id=question.id,
+        current_question_position=question.position,
+        weak_question_ids=question_ids,
+        weak_question_index=index,
+        subtopic_id=None,
+    )
+    await answer_split(
+        message,
+        f"Повтор слабых вопросов {index + 1}/{len(question_ids)}\n\n"
+        f"{question.question_text}",
+        reply_markup=trainer_question_keyboard(
+            question.id,
+            show_select_number=False,
+        ),
+    )
+
+
+async def open_weak_questions(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    user_id: int,
+) -> None:
+    questions = await ContentRepository(session).list_weak_questions(user_id)
+    if not questions:
+        await message.answer("Пока нет вопросов со статусом Не знаю или Сложно.")
+        await open_trainer(message, state, session)
+        return
+
+    await open_weak_question(
+        message,
+        state,
+        session,
+        question_ids=[item.question.id for item in questions],
+        index=0,
+    )
+
+
 @router.message(Command("trainer"))
 async def handle_trainer_command(
     message: Message,
@@ -202,6 +284,29 @@ async def handle_trainer_topics_callback(
     await callback.answer()
     if isinstance(callback.message, Message):
         await open_trainer(callback.message, state, session)
+
+
+@router.callback_query(F.data == TRAINER_REVIEW_WEAK)
+async def handle_trainer_review_weak_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    await callback.answer()
+    if not isinstance(callback.message, Message):
+        return
+
+    user = await ensure_user(callback.from_user, session)
+    if user is None:
+        await callback.message.answer("Не удалось определить пользователя.")
+        return
+
+    await open_weak_questions(
+        callback.message,
+        state,
+        session,
+        user_id=user.id,
+    )
 
 
 @router.callback_query(F.data == TRAINER_START_BEGIN)
@@ -250,7 +355,8 @@ async def handle_trainer_answer_text_callback(
     if not isinstance(callback.message, Message):
         return
 
-    current_question_id = _current_question_id_from_state(await state.get_data())
+    state_data = await state.get_data()
+    current_question_id = _current_question_id_from_state(state_data)
     if current_question_id != callback_data.question_id:
         await callback.message.answer("Этот вопрос уже не активен.")
         return
@@ -263,7 +369,10 @@ async def handle_trainer_answer_text_callback(
     await answer_split(
         callback.message,
         f"Ответ на вопрос {question.position}\n\n{question.answer_text}",
-        reply_markup=trainer_question_keyboard(question.id),
+        reply_markup=trainer_question_keyboard(
+            question.id,
+            show_select_number=not _weak_question_ids_from_state(state_data),
+        ),
     )
 
 
@@ -288,12 +397,6 @@ async def handle_trainer_question_answer_callback(
         await callback.message.answer("Некорректный статус ответа.")
         return
 
-    subtopic_id = _subtopic_id_from_state(state_data)
-    if subtopic_id is None:
-        await callback.message.answer("Сначала выбери подтему через /trainer.")
-        await open_trainer(callback.message, state, session)
-        return
-
     user = await ensure_user(callback.from_user, session)
     if user is None:
         await callback.message.answer("Не удалось определить пользователя.")
@@ -311,12 +414,32 @@ async def handle_trainer_question_answer_callback(
         status=callback_data.status,
     )
 
+    await callback.message.answer(
+        f"Статус сохранен: {_status_label(callback_data.status)}."
+    )
+
+    weak_question_ids = _weak_question_ids_from_state(state_data)
+    if weak_question_ids:
+        next_index = _weak_question_index_from_state(state_data) + 1
+        await state.update_data(weak_question_index=next_index)
+        await open_weak_question(
+            callback.message,
+            state,
+            session,
+            question_ids=weak_question_ids,
+            index=next_index,
+        )
+        return
+
+    subtopic_id = _subtopic_id_from_state(state_data)
+    if subtopic_id is None:
+        await callback.message.answer("Сначала выбери подтему через /trainer.")
+        await open_trainer(callback.message, state, session)
+        return
+
     next_question = await content_repository.get_next_question(
         subtopic_id=subtopic_id,
         current_position=question.position,
-    )
-    await callback.message.answer(
-        f"Статус сохранен: {_status_label(callback_data.status)}."
     )
 
     if next_question is None:

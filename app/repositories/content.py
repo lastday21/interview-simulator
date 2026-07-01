@@ -147,6 +147,33 @@ class ContentRepository:
     async def get_question(self, question_id: int) -> Question | None:
         return await self._session.get(Question, question_id)
 
+    async def list_weak_questions(
+        self,
+        user_id: int,
+        *,
+        active_only: bool = True,
+    ) -> list[QuestionWithStatus]:
+        query = (
+            select(Question, UserQuestionStatus.status)
+            .join(
+                UserQuestionStatus,
+                (UserQuestionStatus.question_id == Question.id)
+                & (UserQuestionStatus.user_id == user_id),
+            )
+            .join(Subtopic, Subtopic.id == Question.subtopic_id)
+            .join(Topic, Topic.id == Subtopic.topic_id)
+            .where(UserQuestionStatus.status.in_([-1, 0]))
+            .order_by(Topic.id, Subtopic.position, Question.position, Question.id)
+        )
+        if active_only:
+            query = query.where(Question.is_active.is_(True))
+
+        result = await self._session.execute(query)
+        return [
+            QuestionWithStatus(question=question, status=status)
+            for question, status in result.all()
+        ]
+
     async def get_question_by_position(
         self,
         *,
