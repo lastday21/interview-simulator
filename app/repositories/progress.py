@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import UserQuestionStatus
@@ -50,18 +51,66 @@ class ProgressRepository:
         if status not in {-1, 0, 1}:
             raise ValueError("Status must be one of -1, 0, 1")
 
-        record = await self.get_question_status(
-            user_id=user_id, question_id=question_id
-        )
-        if record is None:
-            record = UserQuestionStatus(
+        statement = (
+            insert(UserQuestionStatus)
+            .values(
                 user_id=user_id,
                 question_id=question_id,
                 status=status,
             )
-            self._session.add(record)
-        else:
-            record.status = status
+            .on_conflict_do_update(
+                index_elements=[
+                    UserQuestionStatus.user_id,
+                    UserQuestionStatus.question_id,
+                ],
+                set_={
+                    "status": status,
+                    "updated_at": func.now(),
+                },
+            )
+            .returning(UserQuestionStatus)
+        )
 
-        await self._session.flush()
+        record = await self._session.scalar(statement)
+        if record is None:
+            raise RuntimeError("Could not save question status")
         return record
+
+    async def set_trainer_question_status_once(
+        self,
+        *,
+        user_id: int,
+        question_id: int,
+        status: int,
+        message_id: int,
+    ) -> bool:
+        if status not in {-1, 0, 1}:
+            raise ValueError("Status must be one of -1, 0, 1")
+
+        statement = (
+            insert(UserQuestionStatus)
+            .values(
+                user_id=user_id,
+                question_id=question_id,
+                status=status,
+                last_trainer_message_id=message_id,
+            )
+            .on_conflict_do_update(
+                index_elements=[
+                    UserQuestionStatus.user_id,
+                    UserQuestionStatus.question_id,
+                ],
+                set_={
+                    "status": status,
+                    "last_trainer_message_id": message_id,
+                    "updated_at": func.now(),
+                },
+                where=or_(
+                    UserQuestionStatus.last_trainer_message_id.is_(None),
+                    UserQuestionStatus.last_trainer_message_id != message_id,
+                ),
+            )
+            .returning(UserQuestionStatus.user_id)
+        )
+
+        return await self._session.scalar(statement) is not None

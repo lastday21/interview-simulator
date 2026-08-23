@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import InterviewItem, InterviewSession, Question, Subtopic, Topic
@@ -161,6 +161,49 @@ class InterviewRepository:
         if status not in {-1, 0, 1}:
             raise ValueError("Status must be one of -1, 0, 1")
 
+        current_item_id = (
+            select(InterviewItem.id)
+            .where(
+                InterviewItem.user_id == user_id,
+                InterviewItem.answer_status.is_(None),
+            )
+            .order_by(InterviewItem.position)
+            .limit(1)
+            .scalar_subquery()
+        )
+        item = await self._session.scalar(
+            update(InterviewItem)
+            .where(
+                InterviewItem.user_id == user_id,
+                InterviewItem.question_id == question_id,
+                InterviewItem.answer_status.is_(None),
+                InterviewItem.id == current_item_id,
+            )
+            .values(
+                answer_status=status,
+                answered_at=datetime.now(timezone.utc),
+            )
+            .returning(InterviewItem)
+        )
+        if item is not None:
+            has_unanswered = await self._session.scalar(
+                select(InterviewItem.id)
+                .where(
+                    InterviewItem.user_id == user_id,
+                    InterviewItem.answer_status.is_(None),
+                )
+                .order_by(InterviewItem.position)
+                .limit(1)
+            )
+
+            return InterviewAnswerResult(
+                item=item,
+                accepted=True,
+                already_answered=False,
+                is_current_question=True,
+                completed=has_unanswered is None,
+            )
+
         item = await self._session.scalar(
             select(InterviewItem).where(
                 InterviewItem.user_id == user_id,
@@ -176,53 +219,12 @@ class InterviewRepository:
                 completed=False,
             )
 
-        if item.answer_status is not None:
-            return InterviewAnswerResult(
-                item=item,
-                accepted=False,
-                already_answered=True,
-                is_current_question=False,
-                completed=False,
-            )
-
-        current = await self._session.scalar(
-            select(InterviewItem)
-            .where(
-                InterviewItem.user_id == user_id,
-                InterviewItem.answer_status.is_(None),
-            )
-            .order_by(InterviewItem.position)
-            .limit(1)
-        )
-        if current is None or current.id != item.id:
-            return InterviewAnswerResult(
-                item=item,
-                accepted=False,
-                already_answered=False,
-                is_current_question=False,
-                completed=False,
-            )
-
-        item.answer_status = status
-        item.answered_at = datetime.now(timezone.utc)
-        await self._session.flush()
-
-        has_unanswered = await self._session.scalar(
-            select(InterviewItem.id)
-            .where(
-                InterviewItem.user_id == user_id,
-                InterviewItem.answer_status.is_(None),
-            )
-            .order_by(InterviewItem.position)
-            .limit(1)
-        )
-
         return InterviewAnswerResult(
             item=item,
-            accepted=True,
-            already_answered=False,
-            is_current_question=True,
-            completed=has_unanswered is None,
+            accepted=False,
+            already_answered=item.answer_status is not None,
+            is_current_question=False,
+            completed=False,
         )
 
     async def finish_interview(

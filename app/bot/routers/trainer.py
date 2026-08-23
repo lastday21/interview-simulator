@@ -408,11 +408,15 @@ async def handle_trainer_question_answer_callback(
         await callback.message.answer("Вопрос не найден.")
         return
 
-    await ProgressRepository(session).upsert_question_status(
+    accepted = await ProgressRepository(session).set_trainer_question_status_once(
         user_id=user.id,
         question_id=question.id,
         status=callback_data.status,
+        message_id=callback.message.message_id,
     )
+    if not accepted:
+        await callback.message.answer("Этот вопрос уже обработан.")
+        return
 
     await callback.message.answer(
         f"Статус сохранен: {_status_label(callback_data.status)}."
