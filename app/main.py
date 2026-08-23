@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import suppress
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -6,6 +7,7 @@ from aiogram.enums import ParseMode
 from aiogram.types import BotCommand
 
 from app.bot import create_dispatcher
+from app.core.health import run_bot_heartbeat
 from app.core.settings import get_settings
 
 
@@ -31,9 +33,19 @@ async def set_bot_commands(bot: Bot) -> None:
 
 
 async def main() -> None:
+    settings = get_settings()
     bot, dispatcher = build_application()
-    await set_bot_commands(bot)
-    await dispatcher.start_polling(bot)
+    heartbeat_task = asyncio.create_task(
+        run_bot_heartbeat(settings.redis_url),
+        name="bot-heartbeat",
+    )
+    try:
+        await set_bot_commands(bot)
+        await dispatcher.start_polling(bot)
+    finally:
+        heartbeat_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await heartbeat_task
 
 
 if __name__ == "__main__":

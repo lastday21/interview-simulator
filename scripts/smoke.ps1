@@ -16,6 +16,32 @@ function Invoke-Checked {
     }
 }
 
+function Wait-ServiceHealthy {
+    param(
+        [string]$Service,
+        [int]$TimeoutSeconds = 90
+    )
+
+    $containerId = docker compose ps -q $Service
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($containerId)) {
+        throw "Could not find container for service: $Service"
+    }
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $health = docker inspect --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}" $containerId
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not inspect service health: $Service"
+        }
+        if (($health | Select-Object -First 1).Trim() -eq "healthy") {
+            return
+        }
+        Start-Sleep -Seconds 2
+    }
+
+    throw "Service did not become healthy within $TimeoutSeconds seconds: $Service"
+}
+
 if ([string]::IsNullOrWhiteSpace($ProjectPath)) {
     $ProjectPath = Resolve-Path (Join-Path $PSScriptRoot "..")
 }
@@ -34,6 +60,8 @@ try {
             throw "Service is not running: $service"
         }
     }
+
+    Wait-ServiceHealthy -Service "bot"
 
     Invoke-Checked docker @(
         "compose",
