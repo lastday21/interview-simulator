@@ -1,6 +1,9 @@
-from app.bot.routers.trainer import format_trainer_questions_list
+from app.bot.routers.trainer import (
+    format_trainer_question,
+    format_trainer_questions_list,
+)
 from app.db.models import Question
-from app.repositories import QuestionWithStatus
+from app.repositories import QuestionWithStatus, TrainerQuestionContext
 
 
 def test_format_trainer_questions_list_shows_statuses_and_positions() -> None:
@@ -35,3 +38,22 @@ def test_format_trainer_questions_list_shows_statuses_and_positions() -> None:
 
 def test_format_trainer_questions_list_handles_empty_subtopic() -> None:
     assert format_trainer_questions_list([]) == "В этой подтеме пока нет вопросов."
+
+
+def test_format_trainer_question_shows_position_and_location() -> None:
+    question = Question(
+        id=1,
+        subtopic_id=2,
+        position=3,
+        question_text="Что такое event loop?",
+        answer_text="",
+    )
+    context = TrainerQuestionContext(
+        topic_title="Python",
+        subtopic_title="Asyncio",
+        total_questions=40,
+    )
+
+    assert format_trainer_question(question, context) == (
+        "Вопрос 3/40\nPython / Asyncio\n\nЧто такое event loop?"
+    )

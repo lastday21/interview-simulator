@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -10,8 +11,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories import ContentRepository
 
 
+CATALOG_SCHEMA_VERSION = 1
+QUESTION_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9._-]*\Z")
+SOURCE_REQUIRED_FIELDS = ("title", "url", "license", "copyright")
+
+
 @dataclass(slots=True, frozen=True)
 class QuestionRow:
+    external_id: str
+    source_id: str
     topic_title: str
     subtopic_title: str
     question_text: str
@@ -21,6 +29,8 @@ class QuestionRow:
 
 @dataclass(slots=True, frozen=True)
 class PlannedQuestionRow:
+    external_id: str
+    source_id: str
     topic_title: str
     subtopic_title: str
     subtopic_position: int
@@ -33,13 +43,19 @@ class PlannedQuestionRow:
 @dataclass(slots=True)
 class ImportStats:
     topics_created: int = 0
+    topics_deleted: int = 0
     subtopics_created: int = 0
+    subtopics_deleted: int = 0
     questions_created: int = 0
     questions_updated: int = 0
+    questions_deactivated: int = 0
+    questions_deleted: int = 0
     duplicates_skipped: int = 0
 
 
 REQUIRED_FIELDS = {
+    "id": "external_id",
+    "источник": "source_id",
     "тема": "topic_title",
     "подтема": "subtopic_title",
     "вопрос": "question_text",
@@ -65,13 +81,45 @@ def _normalize_is_active(value: Any, *, index: int) -> bool:
     raise ValueError(f"Row {index}: field 'is_active' must be a boolean when provided")
 
 
+def _validate_sources(value: Any) -> set[str]:
+    if not isinstance(value, dict) or not value:
+        raise ValueError("Questions JSON field 'sources' must be a non-empty object")
+
+    source_ids: set[str] = set()
+    for source_id, metadata in value.items():
+        if not isinstance(source_id, str) or not QUESTION_ID_PATTERN.fullmatch(
+            source_id
+        ):
+            raise ValueError(f"Invalid source id: {source_id!r}")
+        if not isinstance(metadata, dict):
+            raise ValueError(f"Source '{source_id}' metadata must be an object")
+        for field_name in SOURCE_REQUIRED_FIELDS:
+            field_value = metadata.get(field_name)
+            if not isinstance(field_value, str) or not field_value.strip():
+                raise ValueError(
+                    f"Source '{source_id}' field '{field_name}' must be a non-empty string"
+                )
+        source_ids.add(source_id)
+    return source_ids
+
+
 def load_question_rows(path: Path) -> list[QuestionRow]:
     raw_payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(raw_payload, list):
-        raise ValueError("Questions JSON must contain a top-level list")
+    if not isinstance(raw_payload, dict):
+        raise ValueError("Questions JSON must contain a top-level object")
+    if raw_payload.get("schema_version") != CATALOG_SCHEMA_VERSION:
+        raise ValueError(
+            f"Questions JSON schema_version must be {CATALOG_SCHEMA_VERSION}"
+        )
+
+    source_ids = _validate_sources(raw_payload.get("sources"))
+    raw_questions = raw_payload.get("questions")
+    if not isinstance(raw_questions, list):
+        raise ValueError("Questions JSON field 'questions' must be a list")
 
     rows: list[QuestionRow] = []
-    for index, item in enumerate(raw_payload, start=1):
+    seen_external_ids: set[str] = set()
+    for index, item in enumerate(raw_questions, start=1):
         if not isinstance(item, dict):
             raise ValueError(f"Row {index}: expected an object")
 
@@ -86,6 +134,17 @@ def load_question_rows(path: Path) -> list[QuestionRow]:
                 field_name=source_field,
                 index=index,
             )
+
+        external_id = normalized["external_id"]
+        if not QUESTION_ID_PATTERN.fullmatch(external_id):
+            raise ValueError(f"Row {index}: invalid question id '{external_id}'")
+        if external_id in seen_external_ids:
+            raise ValueError(f"Row {index}: duplicate question id '{external_id}'")
+        seen_external_ids.add(external_id)
+
+        source_id = normalized["source_id"]
+        if source_id not in source_ids:
+            raise ValueError(f"Row {index}: unknown source id '{source_id}'")
 
         normalized["is_active"] = _normalize_is_active(
             item.get("is_active"),
@@ -123,6 +182,8 @@ def plan_question_rows(rows: list[QuestionRow]) -> tuple[list[PlannedQuestionRow
 
         planned.append(
             PlannedQuestionRow(
+                external_id=row.external_id,
+                source_id=row.source_id,
                 topic_title=row.topic_title,
                 subtopic_title=row.subtopic_title,
                 subtopic_position=subtopic_order[subtopic_key],
@@ -141,7 +202,12 @@ class QuestionImportService:
         self._session = session
         self._repository = ContentRepository(session)
 
-    async def import_rows(self, rows: list[PlannedQuestionRow]) -> ImportStats:
+    async def import_rows(
+        self,
+        rows: list[PlannedQuestionRow],
+        *,
+        purge_missing: bool = False,
+    ) -> ImportStats:
         stats = ImportStats()
         topic_ids: dict[str, int] = {}
         subtopic_ids: dict[tuple[str, str], int] = {}
@@ -169,6 +235,8 @@ class QuestionImportService:
                     stats.subtopics_created += 1
 
             _, created = await self._repository.upsert_question(
+                external_id=row.external_id,
+                source_id=row.source_id,
                 subtopic_id=subtopic_id,
                 position=row.question_position,
                 question_text=row.question_text,
@@ -179,5 +247,17 @@ class QuestionImportService:
                 stats.questions_created += 1
             else:
                 stats.questions_updated += 1
+
+        external_ids = {row.external_id for row in rows}
+        if purge_missing:
+            stats.questions_deleted = (
+                await self._repository.delete_questions_not_in_catalog(external_ids)
+            )
+            stats.subtopics_deleted = await self._repository.delete_empty_subtopics()
+            stats.topics_deleted = await self._repository.delete_empty_topics()
+        else:
+            stats.questions_deactivated = (
+                await self._repository.deactivate_questions_not_in_catalog(external_ids)
+            )
 
         return stats

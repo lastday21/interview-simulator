@@ -31,6 +31,10 @@ class Question(Base):
     __tablename__ = "questions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    external_id: Mapped[str | None] = mapped_column(
+        String(64), unique=True, index=True, nullable=True
+    )
+    source_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     subtopic_id: Mapped[int] = mapped_column(
         ForeignKey("subtopics.id", ondelete="CASCADE"), index=True
     )

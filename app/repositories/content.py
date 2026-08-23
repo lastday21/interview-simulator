@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import and_, case, exists, func, or_, select
+from sqlalchemy import and_, case, delete, exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models import Question, Subtopic, Topic, UserQuestionStatus
 
@@ -12,6 +14,13 @@ from app.db.models import Question, Subtopic, Topic, UserQuestionStatus
 class QuestionWithStatus:
     question: Question
     status: int | None
+
+
+@dataclass(slots=True, frozen=True)
+class TrainerQuestionContext:
+    topic_title: str
+    subtopic_title: str
+    total_questions: int
 
 
 @dataclass(slots=True, frozen=True)
@@ -31,16 +40,37 @@ class ContentRepository:
         self._session = session
 
     async def list_topics(self) -> list[Topic]:
-        result = await self._session.scalars(select(Topic).order_by(Topic.id))
+        has_active_questions = exists(
+            select(Question.id)
+            .join(Subtopic, Subtopic.id == Question.subtopic_id)
+            .where(
+                Subtopic.topic_id == Topic.id,
+                Question.is_active.is_(True),
+            )
+        )
+        result = await self._session.scalars(
+            select(Topic).where(has_active_questions).order_by(Topic.id)
+        )
         return list(result)
 
     async def list_subtopics(self, topic_id: int) -> list[Subtopic]:
         result = await self._session.scalars(
             select(Subtopic)
-            .where(Subtopic.topic_id == topic_id)
+            .where(
+                Subtopic.topic_id == topic_id,
+                exists(
+                    select(Question.id).where(
+                        Question.subtopic_id == Subtopic.id,
+                        Question.is_active.is_(True),
+                    )
+                ),
+            )
             .order_by(Subtopic.position, Subtopic.id)
         )
         return list(result)
+
+    async def get_subtopic(self, subtopic_id: int) -> Subtopic | None:
+        return await self._session.get(Subtopic, subtopic_id)
 
     async def list_subtopics_by_topic_ids(
         self,
@@ -51,7 +81,15 @@ class ContentRepository:
 
         result = await self._session.scalars(
             select(Subtopic)
-            .where(Subtopic.topic_id.in_(topic_ids))
+            .where(
+                Subtopic.topic_id.in_(topic_ids),
+                exists(
+                    select(Question.id).where(
+                        Question.subtopic_id == Subtopic.id,
+                        Question.is_active.is_(True),
+                    )
+                ),
+            )
             .order_by(Subtopic.topic_id, Subtopic.position, Subtopic.id)
         )
         return list(result)
@@ -146,6 +184,37 @@ class ContentRepository:
 
     async def get_question(self, question_id: int) -> Question | None:
         return await self._session.get(Question, question_id)
+
+    async def get_trainer_question_context(
+        self,
+        question_id: int,
+    ) -> TrainerQuestionContext | None:
+        counted_question = aliased(Question)
+        total_questions = (
+            select(func.count(counted_question.id))
+            .where(
+                counted_question.subtopic_id == Subtopic.id,
+                counted_question.is_active.is_(True),
+            )
+            .correlate(Subtopic)
+            .scalar_subquery()
+        )
+        query = (
+            select(Topic.title, Subtopic.title, total_questions)
+            .select_from(Question)
+            .join(Subtopic, Subtopic.id == Question.subtopic_id)
+            .join(Topic, Topic.id == Subtopic.topic_id)
+            .where(Question.id == question_id)
+        )
+        row = (await self._session.execute(query)).one_or_none()
+        if row is None:
+            return None
+
+        return TrainerQuestionContext(
+            topic_title=row[0],
+            subtopic_title=row[1],
+            total_questions=int(row[2]),
+        )
 
     async def list_weak_questions(
         self,
@@ -318,6 +387,8 @@ class ContentRepository:
     async def upsert_question(
         self,
         *,
+        external_id: str,
+        source_id: str,
         subtopic_id: int,
         position: int,
         question_text: str,
@@ -325,14 +396,21 @@ class ContentRepository:
         is_active: bool = True,
     ) -> tuple[Question, bool]:
         question = await self._session.scalar(
-            select(Question).where(
-                Question.subtopic_id == subtopic_id,
-                Question.position == position,
-            )
+            select(Question).where(Question.external_id == external_id)
         )
+        if question is None:
+            question = await self._session.scalar(
+                select(Question).where(
+                    Question.external_id.is_(None),
+                    Question.subtopic_id == subtopic_id,
+                    Question.position == position,
+                )
+            )
         created = question is None
         if question is None:
             question = Question(
+                external_id=external_id,
+                source_id=source_id,
                 subtopic_id=subtopic_id,
                 position=position,
                 question_text=question_text,
@@ -341,9 +419,67 @@ class ContentRepository:
             )
             self._session.add(question)
         else:
+            question.external_id = external_id
+            question.source_id = source_id
+            question.subtopic_id = subtopic_id
+            question.position = position
             question.question_text = question_text
             question.answer_text = answer_text
             question.is_active = is_active
 
         await self._session.flush()
         return question, created
+
+    async def deactivate_questions_not_in_catalog(
+        self,
+        external_ids: set[str],
+    ) -> int:
+        missing_condition: ColumnElement[bool] = Question.external_id.is_(None)
+        if external_ids:
+            missing_condition = or_(
+                missing_condition,
+                Question.external_id.not_in(external_ids),
+            )
+
+        result = await self._session.scalars(
+            update(Question)
+            .where(
+                missing_condition,
+                Question.is_active.is_(True),
+            )
+            .values(is_active=False)
+            .returning(Question.id)
+        )
+        return len(list(result))
+
+    async def delete_questions_not_in_catalog(
+        self,
+        external_ids: set[str],
+    ) -> int:
+        missing_condition: ColumnElement[bool] = Question.external_id.is_(None)
+        if external_ids:
+            missing_condition = or_(
+                missing_condition,
+                Question.external_id.not_in(external_ids),
+            )
+
+        result = await self._session.scalars(
+            delete(Question).where(missing_condition).returning(Question.id)
+        )
+        return len(list(result))
+
+    async def delete_empty_subtopics(self) -> int:
+        has_questions = exists(
+            select(Question.id).where(Question.subtopic_id == Subtopic.id)
+        )
+        result = await self._session.scalars(
+            delete(Subtopic).where(~has_questions).returning(Subtopic.id)
+        )
+        return len(list(result))
+
+    async def delete_empty_topics(self) -> int:
+        has_subtopics = exists(select(Subtopic.id).where(Subtopic.topic_id == Topic.id))
+        result = await self._session.scalars(
+            delete(Topic).where(~has_subtopics).returning(Topic.id)
+        )
+        return len(list(result))

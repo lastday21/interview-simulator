@@ -8,6 +8,7 @@ from app.bot.callbacks import (
     TRAINER_REVIEW_WEAK,
     TRAINER_SELECT_NUMBER,
     TRAINER_START_BEGIN,
+    TRAINER_SUBTOPICS,
     TRAINER_TOPICS,
     TrainerQuestionAnswerCallback,
     TrainerQuestionAnswerTextCallback,
@@ -103,8 +104,8 @@ def trainer_selected_subtopic_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="Назад к темам",
-                    callback_data=TRAINER_TOPICS,
+                    text="Назад к подтемам",
+                    callback_data=TRAINER_SUBTOPICS,
                 )
             ],
             [
@@ -121,6 +122,7 @@ def trainer_question_keyboard(
     question_id: int,
     *,
     show_select_number: bool = True,
+    back_to_subtopics: bool = True,
 ) -> InlineKeyboardMarkup:
     rows = [
         [
@@ -170,8 +172,10 @@ def trainer_question_keyboard(
         [
             [
                 InlineKeyboardButton(
-                    text="Назад к темам",
-                    callback_data=TRAINER_TOPICS,
+                    text=("Назад к подтемам" if back_to_subtopics else "Назад к темам"),
+                    callback_data=(
+                        TRAINER_SUBTOPICS if back_to_subtopics else TRAINER_TOPICS
+                    ),
                 )
             ],
             [

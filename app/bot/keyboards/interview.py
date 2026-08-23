@@ -192,5 +192,11 @@ def interview_question_keyboard(question_id: int) -> InlineKeyboardMarkup:
                     ).pack(),
                 )
             ],
+            [
+                InlineKeyboardButton(
+                    text="Назад в меню",
+                    callback_data=MAIN_MENU,
+                )
+            ],
         ]
     )

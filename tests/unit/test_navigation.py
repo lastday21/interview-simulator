@@ -17,6 +17,7 @@ from app.bot.callbacks import (
     TRAINER_REVIEW_WEAK,
     TRAINER_SELECT_NUMBER,
     TRAINER_START_BEGIN,
+    TRAINER_SUBTOPICS,
     TRAINER_TOPICS,
     InterviewAnswerCallback,
     InterviewSubtopicCallback,
@@ -114,7 +115,7 @@ def test_trainer_selected_subtopic_keyboard_has_start_options() -> None:
     assert callback_data == [
         TRAINER_START_BEGIN,
         TRAINER_SELECT_NUMBER,
-        TRAINER_TOPICS,
+        TRAINER_SUBTOPICS,
         MAIN_MENU,
     ]
 
@@ -132,7 +133,7 @@ def test_trainer_question_keyboard_has_answer_actions() -> None:
         TrainerQuestionAnswerCallback(question_id=42, status=-1).pack(),
         TrainerQuestionAnswerTextCallback(question_id=42).pack(),
         TRAINER_SELECT_NUMBER,
-        TRAINER_TOPICS,
+        TRAINER_SUBTOPICS,
         MAIN_MENU,
     ]
 
@@ -150,9 +151,24 @@ def test_trainer_question_keyboard_can_hide_number_selection() -> None:
         TrainerQuestionAnswerCallback(question_id=42, status=0).pack(),
         TrainerQuestionAnswerCallback(question_id=42, status=-1).pack(),
         TrainerQuestionAnswerTextCallback(question_id=42).pack(),
-        TRAINER_TOPICS,
+        TRAINER_SUBTOPICS,
         MAIN_MENU,
     ]
+
+
+def test_weak_trainer_question_keyboard_returns_to_topics() -> None:
+    keyboard = trainer_question_keyboard(
+        question_id=42,
+        show_select_number=False,
+        back_to_subtopics=False,
+    )
+
+    callback_data = [
+        button.callback_data for row in keyboard.inline_keyboard for button in row
+    ]
+
+    assert TRAINER_SUBTOPICS not in callback_data
+    assert TRAINER_TOPICS in callback_data
 
 
 def test_interview_topics_keyboard_toggles_topics() -> None:
@@ -240,7 +256,7 @@ def test_interview_active_keyboard_offers_resume_or_new_selection() -> None:
     ]
 
 
-def test_interview_question_keyboard_has_only_status_actions() -> None:
+def test_interview_question_keyboard_has_status_actions_and_menu_exit() -> None:
     keyboard = interview_question_keyboard(question_id=77)
 
     callback_data = [
@@ -251,4 +267,5 @@ def test_interview_question_keyboard_has_only_status_actions() -> None:
         InterviewAnswerCallback(question_id=77, status=1).pack(),
         InterviewAnswerCallback(question_id=77, status=0).pack(),
         InterviewAnswerCallback(question_id=77, status=-1).pack(),
+        MAIN_MENU,
     ]

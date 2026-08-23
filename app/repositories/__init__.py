@@ -1,4 +1,9 @@
-from app.repositories.content import ContentRepository, QuestionWithStatus, TopicStats
+from app.repositories.content import (
+    ContentRepository,
+    QuestionWithStatus,
+    TopicStats,
+    TrainerQuestionContext,
+)
 from app.repositories.interview import (
     InterviewAnswerResult,
     InterviewCompletionResult,
@@ -19,5 +24,6 @@ __all__ = [
     "ProgressRepository",
     "QuestionWithStatus",
     "TopicStats",
+    "TrainerQuestionContext",
     "UserRepository",
 ]

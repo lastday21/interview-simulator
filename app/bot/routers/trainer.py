@@ -11,6 +11,7 @@ from app.bot.callbacks import (
     TRAINER_REVIEW_WEAK,
     TRAINER_SELECT_NUMBER,
     TRAINER_START_BEGIN,
+    TRAINER_SUBTOPICS,
     TRAINER_TOPICS,
     TrainerQuestionAnswerCallback,
     TrainerQuestionAnswerTextCallback,
@@ -27,7 +28,12 @@ from app.bot.keyboards import (
 from app.bot.messages import answer_split
 from app.bot.routers.common import ensure_user
 from app.db.models import Question
-from app.repositories import ContentRepository, ProgressRepository, QuestionWithStatus
+from app.repositories import (
+    ContentRepository,
+    ProgressRepository,
+    QuestionWithStatus,
+    TrainerQuestionContext,
+)
 
 router = Router(name="trainer")
 
@@ -64,6 +70,17 @@ def format_trainer_questions_list(
         for item in questions
     )
     return "\n".join(lines)
+
+
+def format_trainer_question(
+    question: Question,
+    context: TrainerQuestionContext,
+) -> str:
+    return (
+        f"Вопрос {question.position}/{context.total_questions}\n"
+        f"{context.topic_title} / {context.subtopic_title}\n\n"
+        f"{question.question_text}"
+    )
 
 
 async def open_trainer(
@@ -121,12 +138,20 @@ async def open_selected_subtopic(
     *,
     user_id: int | None,
 ) -> None:
-    questions = await ContentRepository(session).list_questions(
+    content_repository = ContentRepository(session)
+    subtopic = await content_repository.get_subtopic(subtopic_id)
+    if subtopic is None:
+        await message.answer("Подтема не найдена.")
+        await open_trainer(message, state, session)
+        return
+
+    questions = await content_repository.list_questions(
         subtopic_id,
         user_id=user_id,
     )
     await state.set_state(TrainerStates.questions_list)
     await state.update_data(
+        topic_id=subtopic.topic_id,
         subtopic_id=subtopic_id,
         current_question_id=None,
         current_question_position=None,
@@ -142,8 +167,14 @@ async def open_selected_subtopic(
 async def open_question(
     message: Message,
     state: FSMContext,
+    session: AsyncSession,
     question: Question,
 ) -> None:
+    context = await ContentRepository(session).get_trainer_question_context(question.id)
+    if context is None:
+        await message.answer("Не удалось определить тему и подтему вопроса.")
+        return
+
     await state.set_state(TrainerStates.question)
     await state.update_data(
         current_question_id=question.id,
@@ -151,7 +182,7 @@ async def open_question(
     )
     await answer_split(
         message,
-        f"Вопрос {question.position}\n\n{question.question_text}",
+        format_trainer_question(question, context),
         reply_markup=trainer_question_keyboard(question.id),
     )
 
@@ -160,6 +191,13 @@ def _subtopic_id_from_state(data: dict[str, object]) -> int | None:
     subtopic_id = data.get("subtopic_id")
     if isinstance(subtopic_id, int):
         return subtopic_id
+    return None
+
+
+def _topic_id_from_state(data: dict[str, object]) -> int | None:
+    topic_id = data.get("topic_id")
+    if isinstance(topic_id, int):
+        return topic_id
     return None
 
 
@@ -225,6 +263,7 @@ async def open_weak_question(
         reply_markup=trainer_question_keyboard(
             question.id,
             show_select_number=False,
+            back_to_subtopics=False,
         ),
     )
 
@@ -330,7 +369,7 @@ async def handle_trainer_start_begin_callback(
         await callback.message.answer("В этой подтеме пока нет вопросов.")
         return
 
-    await open_question(callback.message, state, questions[0].question)
+    await open_question(callback.message, state, session, questions[0].question)
 
 
 @router.callback_query(F.data == TRAINER_SELECT_NUMBER)
@@ -342,6 +381,25 @@ async def handle_trainer_select_number_callback(
     await state.set_state(TrainerStates.wait_question_number)
     if isinstance(callback.message, Message):
         await callback.message.answer("Введи номер вопроса из списка.")
+
+
+@router.callback_query(F.data == TRAINER_SUBTOPICS)
+async def handle_trainer_subtopics_callback(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    await callback.answer()
+    if not isinstance(callback.message, Message):
+        return
+
+    topic_id = _topic_id_from_state(await state.get_data())
+    if topic_id is None:
+        await callback.message.answer("Сначала выбери тему.")
+        await open_trainer(callback.message, state, session)
+        return
+
+    await open_subtopics(callback.message, state, session, topic_id)
 
 
 @router.callback_query(TrainerQuestionAnswerTextCallback.filter())
@@ -372,6 +430,7 @@ async def handle_trainer_answer_text_callback(
         reply_markup=trainer_question_keyboard(
             question.id,
             show_select_number=not _weak_question_ids_from_state(state_data),
+            back_to_subtopics=not _weak_question_ids_from_state(state_data),
         ),
     )
 
@@ -470,7 +529,7 @@ async def handle_trainer_question_answer_callback(
         )
         return
 
-    await open_question(callback.message, state, next_question)
+    await open_question(callback.message, state, session, next_question)
 
 
 @router.callback_query(TrainerTopicCallback.filter())
@@ -535,4 +594,4 @@ async def handle_question_number_message(
         await message.answer("В этой подтеме нет вопроса с таким номером.")
         return
 
-    await open_question(message, state, question)
+    await open_question(message, state, session, question)
